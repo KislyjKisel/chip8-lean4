@@ -3,6 +3,7 @@ import Chip8.Data.UInt8
 namespace Chip8
 
 inductive Error where
+  | Exit
   | ProgramCounterOutOfRange
   | StackOverflow
   | StackUnderflow
@@ -15,6 +16,7 @@ inductive Error where
 
 instance : ToString Error where
   toString
+    | Error.Exit => "Program exited"
     | Error.ProgramCounterOutOfRange => "Program Counter out of range"
     | Error.StackOverflow => "Stack overflow"
     | Error.StackUnderflow => "Stack underflow"

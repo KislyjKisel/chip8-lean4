@@ -44,6 +44,8 @@ structure Config where
   Controls `I` changes during [FX55] and [FX65].
   -/
   quirkMemIndex : QuirkMemIndex := QuirkMemIndex.AddX1
+  /-- Adds [00FD] instruction: exit -/
+  extExit : Bool := false
 
 def Config.ramSize (cfg : Config) : UInt16 :=
   cfg.ramSizeS.fst

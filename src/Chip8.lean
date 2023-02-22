@@ -62,6 +62,11 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
               else
                 throw Error.StackUnderflow
 
+          | 0xFD =>
+            if cfg.extExit
+              then throw Error.Exit
+              else badInstr
+
           | _ => badInstr
       }
       else badInstr
