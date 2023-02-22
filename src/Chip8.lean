@@ -427,11 +427,12 @@ def Chip8.render {cfg} (chip8 : Chip8 cfg) (rect : Raylib.Rectangle) : BaseIO Un
       let color := if displayByte > 0 then cfg.color1 else cfg.color0
       Raylib.DrawRectangleV (Raylib.Vector2.mk x y) (Raylib.Vector2.mk cellW cellH) color
 
-def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : ByteVector (cfg.ramSize.toNat - ramPrefixSize.toNat)) : Chip8 cfg :=
+def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : ByteVector (cfg.ramSize.toNat - ramPrefixSize.toNat)) (rndg : StdGen) : Chip8 cfg :=
   let zeroed: Chip8 cfg := default
   { zeroed with
     ram := (pre.append rom).subst $ Nat.add_sub_of_le cfg.ramSize_prefix
     program_counter := ramPrefixSize
+    random_gen := rndg
   }
 
 -- todo: loop :)

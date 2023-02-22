@@ -33,10 +33,11 @@ def main : IO Unit := do
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
   let ramPrefix ← LoadFileData "prefix.bin"
   let rom ← LoadFileData "chip8-test-suite.ch8"
+  let rnd_gen := mkStdGen $ UInt64.toNat $ ByteArray.toUInt64LE! $ ← IO.getRandomBytes 8
   if rom_fits: rom.size ≤ cfg.ramSize.toNat - Chip8.ramPrefixSize.toNat then {
     if ramPrefix_size: ramPrefix.size = Chip8.ramPrefixSize.toNat then {
       let romPadded := (ByteVector.fromArray rom).padRight rom_fits 0
-      let mut chip8 := Chip8.load cfg (Subtype.mk ramPrefix ramPrefix_size) romPadded
+      let mut chip8 := Chip8.load cfg (Subtype.mk ramPrefix ramPrefix_size) romPadded rnd_gen
       let mut timersTimer := Timer.new timerInterval
       let mut cpuTimer := Timer.new cpuInterval
       repeat do
