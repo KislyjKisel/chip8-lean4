@@ -339,7 +339,13 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
           let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
           let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
           ram := ram.set (Fin.mk i.toNat ih) $ chip8.gp_registers.get vi'
-        pure { chip8 with ram }
+        pure { chip8 with
+          ram
+          index_register := match cfg.quirkMemIndex with
+            | QuirkMemIndex.Keep => chip8.index_register
+            | QuirkMemIndex.AddX => chip8.index_register + instr0.secondHalf.toUInt16
+            | QuirkMemIndex.AddX1 => chip8.index_register + instr0.secondHalf.toUInt16 + 1
+        }
 
       -- [FX65] Load: for i ∈ 0..X do `Vi := [I+i]`
       | 0x65 =>
@@ -350,7 +356,13 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
           let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
           let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
           gp_registers := gp_registers.set vi' (chip8.ram.get (Fin.mk i.toNat ih))
-        pure { chip8 with gp_registers }
+        pure { chip8 with
+          gp_registers
+          index_register := match cfg.quirkMemIndex with
+            | QuirkMemIndex.Keep => chip8.index_register
+            | QuirkMemIndex.AddX => chip8.index_register + instr0.secondHalf.toUInt16
+            | QuirkMemIndex.AddX1 => chip8.index_register + instr0.secondHalf.toUInt16 + 1
+        }
 
       | _ => badInstr
 

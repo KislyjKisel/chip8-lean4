@@ -5,6 +5,14 @@ set_option autoImplicit false
 
 namespace Chip8
 
+inductive QuirkMemIndex where
+  /-- Keep `I` unchanged -/
+  | Keep
+  /-- Set index to the address of the last accessed mem cell. `I := I + X` -/
+  | AddX
+  /-- Set index to the address one past the last accessed mem cell. `I := I + X + 1` -/
+  | AddX1
+
 structure Config where
   instructions_per_sec : Float
   ramSizeS : Σ (ramSize : UInt16), PLift (ramPrefixSize ≤ ramSize) := Sigma.mk 4096 $ PLift.up $ by decide
@@ -32,6 +40,10 @@ structure Config where
   `true`: `VF` is set on "overflow" (0x1000).
   -/
   quirkIndexAdd : Bool := false
+  /--
+  Controls `I` changes during [FX55] and [FX65].
+  -/
+  quirkMemIndex : QuirkMemIndex := QuirkMemIndex.AddX1
 
 def Config.ramSize (cfg : Config) : UInt16 :=
   cfg.ramSizeS.fst
