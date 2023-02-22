@@ -215,20 +215,20 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
           -- [8XY4] Add: `VX := VX + VY` (affecting carry flag)
           | 0x4 =>
             pure { chip8 with
-              gp_registers := (chip8.gp_registers.set vfi (decide $ 255 - vx < vy).toUInt8).set
-                vxi (vx + vy)
+              gp_registers := (chip8.gp_registers.set vxi (vx + vy)).set
+                vfi (decide $ 255 - vx < vy).toUInt8
             }
 
           -- [8XY5] Subtract: `VX := VX - VY`
           | 0x5 => pure { chip8 with
-            gp_registers := (chip8.gp_registers.set vfi (decide $ vx > vy).toUInt8).set
-              vxi (vx - vy)
+            gp_registers := (chip8.gp_registers.set vxi (vx - vy)).set
+              vfi (decide $ vx > vy).toUInt8
           }
 
           -- [8XY7] Subtract: `VX := VY - VX`
           | 0x7 => pure { chip8 with
-            gp_registers := (chip8.gp_registers.set vfi (decide $ vy > vx).toUInt8).set
-              vxi (vy - vx)
+            gp_registers := (chip8.gp_registers.set vxi (vy - vx)).set
+              vfi (decide $ vy > vx).toUInt8
           }
 
           -- [8XY6] Bit shift (right) (affecting carry flag)
