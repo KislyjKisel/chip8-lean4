@@ -239,6 +239,7 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
       let _ := ← MonadExcept.check (idx0 < cfg.ramSize) Error.SpriteDataOutOfBounds
       let idx1Valid := (← MonadExcept.check (idx1 ≤ cfg.ramSize) Error.SpriteDataOutOfBounds).down
       let mut display := chip8.display
+      let mut vf: UInt8 := 0
       for ih: i in [idx0.toNat : idx1.toNat] do
         let y := y0 + i - idx0.toNat
         if yh: y < cfg.displayHeight then do
@@ -248,82 +249,110 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
             if xh: x < cfg.displayWidth then {
               let shift: UInt8 := 7 - (UInt8.mk $ Fin.mk spriteX $ sxh.upper.trans (by decide));
               let spriteBit: UInt8 := AndOp.and 1 $ spriteRow >>> shift;
-              display := display.modify
-                (Fin.mk (y * cfg.displayWidth + x) (Nat.matrixLinearIndex_bound yh xh))
-                (Xor.xor spriteBit)
+              let di := (Fin.mk (y * cfg.displayWidth + x) (Nat.matrixLinearIndex_bound yh xh))
+              let displayBit: UInt8 := display.get di
+              if spriteBit = 1 && displayBit = 1 then {
+                vf := 1
+              }
+              display := display.set di (Xor.xor spriteBit displayBit)
             }
             else break
         else break
-      return { chip8 with display := display }
+      return { chip8 with
+        display := display
+        gp_registers := chip8.gp_registers.set vfi vf
+      }
 
-    -- | 0xE => match instr1 with
-    --   -- [EX9E] if key `VX` is pressed then `PC := PC + 2`
-    --   -- [EXA1] if key `VX` is *not* pressed then `PC := PC + 2`
-    --   | 0x9E | 0xA1 =>
-    --     let vx := chip8.gp_registers.get instr0.secondHalfFin
-    --     if h: vx.toNat < UInt8.halfSize
-    --       then pure $ if chip8.keys.get (Fin.mk vx.toNat h) == (instr1 == 0x9E)
-    --         then { chip8 with program_counter := chip8.program_counter + 2 }
-    --         else chip8
-    --       else throw Error.KeyOutOfRange
+    | 0xE => match instr1 with
+      -- [EX9E] if key `VX` is pressed then `PC := PC + 2`
+      -- [EXA1] if key `VX` is *not* pressed then `PC := PC + 2`
+      | 0x9E | 0xA1 =>
+        let vx := chip8.gp_registers.get instr0.secondHalfFin
+        if h: vx.toNat < UInt8.halfSize
+          then pure $ if chip8.keys.get (Fin.mk vx.toNat h) == (instr1 == 0x9E)
+            then { chip8 with program_counter := chip8.program_counter + 2 }
+            else chip8
+          else throw Error.KeyOutOfRange
 
-    --   | _ => badInstr
+      | _ => badInstr
 
-    -- | 0xF => match instr1 with
-    --   -- [FX07] Set `VX` to `DT`
-    --   | 0x07 => pure { chip8 with
-    --     gp_registers := chip8.gp_registers.set instr0.secondHalfFin chip8.delay_timer
-    --   }
+    | 0xF => match instr1 with
+      -- [FX07] Set `VX` to `DT`
+      | 0x07 => pure { chip8 with
+        gp_registers := chip8.gp_registers.set instr0.secondHalfFin chip8.delay_timer
+      }
 
-    --   -- [FX15] Set `DT` to `VX`
-    --   | 0x15 => pure { chip8 with
-    --     delay_timer := chip8.gp_registers.get instr0.secondHalfFin
-    --   }
+      -- [FX15] Set `DT` to `VX`
+      | 0x15 => pure { chip8 with
+        delay_timer := chip8.gp_registers.get instr0.secondHalfFin
+      }
 
-    --   -- [FX18] Set `ST` to `VX`
-    --   | 0x18 => pure { chip8 with
-    --     sound_timer := chip8.gp_registers.get instr0.secondHalfFin
-    --   }
+      -- [FX18] Set `ST` to `VX`
+      | 0x18 => pure { chip8 with
+        sound_timer := chip8.gp_registers.get instr0.secondHalfFin
+      }
 
-    --   -- [FX1E] `I := I + VX`
-    --   | 0x1E =>
-    --     let i': UInt16 := chip8.index_register + (chip8.gp_registers.get instr0.secondHalfFin).toUInt16
-    --     pure $ if cfg.quirkIndexAdd && i' ≥ 0x1000
-    --       then { chip8 with index_register := i', gp_registers := chip8.gp_registers.set vfi 1 }
-    --       else { chip8 with index_register := i' }
+      -- [FX1E] `I := I + VX`
+      | 0x1E =>
+        let i': UInt16 := chip8.index_register + (chip8.gp_registers.get instr0.secondHalfFin).toUInt16
+        pure $ if cfg.quirkIndexAdd && i' ≥ 0x1000
+          then { chip8 with index_register := i', gp_registers := chip8.gp_registers.set vfi 1 }
+          else { chip8 with index_register := i' }
 
-    --   -- [FX0A] Wait for key input, then write pressed key index to `VX`
-    --   | 0x0A => pure $
-    --     match chip8.keys.indexOf? true with
-    --       | some k => { chip8 with
-    --         gp_registers := chip8.gp_registers.set instr0.secondHalfFin $ 
-    --           UInt8.mk $ Fin.mk k.val $ k.isLt.trans $ by decide
-    --       }
-    --       | none => { chip8 with program_counter := pc0 }
+      -- [FX0A] Wait for key input, then write pressed key index to `VX`
+      | 0x0A => pure $
+        match chip8.keys.indexOf? true with
+          | some k => { chip8 with
+            gp_registers := chip8.gp_registers.set instr0.secondHalfFin $ 
+              UInt8.mk $ Fin.mk k.val $ k.isLt.trans $ by decide
+          }
+          | none => { chip8 with program_counter := pc0 }
 
-    --   -- [FX33] Store decimal digits of `VX` in (big endian) `[I]`, `[I+1]`, `[I+2]`.
-    --   | 0x33 =>
-    --     let i0 := chip8.index_register
-    --     let i1 := i0 + 1
-    --     let i2 := i0 + 2
-    --     let i0h := (← MonadExcept.check (i0 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
-    --     let i1h := (← MonadExcept.check (i1 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
-    --     let i2h := (← MonadExcept.check (i2 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
-    --     let vx := chip8.gp_registers.get instr0.secondHalfFin
-    --     pure { chip8 with
-    --       ram := chip8.ram
-    --         |> λ ram ↦ .set ram (Fin.mk i0.val i0h) (vx / 100)
-    --         |> λ ram ↦ .set ram (Fin.mk i1.val i1h) (vx / 10 % 10)
-    --         |> λ ram ↦ .set ram (Fin.mk i2.val i2h) (vx % 10)
-    --     }
+      -- [FX29] Store builtin font char ram offset in `I`
+      | 0x29 =>
+        pure { chip8 with
+          index_register := fontOffset + (chip8.gp_registers.get instr0.secondHalfFin).secondHalf.toUInt16 * fontSize
+        }
 
-    --   | 0x55 =>
-    --     panic! "not implemented" -- TODO
+      -- [FX33] Store decimal digits of `VX` in (big endian) `[I]`, `[I+1]`, `[I+2]`.
+      | 0x33 =>
+        let i0 := chip8.index_register
+        let i1 := i0 + 1
+        let i2 := i0 + 2
+        let i0h := (← MonadExcept.check (i0 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
+        let i1h := (← MonadExcept.check (i1 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
+        let i2h := (← MonadExcept.check (i2 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
+        let vx := chip8.gp_registers.get instr0.secondHalfFin
+        pure { chip8 with
+          ram := chip8.ram
+            |> λ ram ↦ .set ram (Fin.mk i0.val i0h) (vx / 100)
+            |> λ ram ↦ .set ram (Fin.mk i1.val i1h) (vx / 10 % 10)
+            |> λ ram ↦ .set ram (Fin.mk i2.val i2h) (vx % 10)
+        }
 
-    --   | 0x56 =>
-    --     panic! "not implemented" -- TODO
+      -- [FX55] Store: for i ∈ 0..X do `[I+i] := Vi`
+      | 0x55 =>
+        let mut ram := chip8.ram
+        let vxi := instr0.secondHalfFin
+        for vih: vi in [: vxi.val.succ] do
+          let i := chip8.index_register + vi.toUInt16
+          let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
+          let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
+          ram := ram.set (Fin.mk i.toNat ih) $ chip8.gp_registers.get vi'
+        pure { chip8 with ram }
 
-    --  | _ => badInstr
+      -- [FX65] Load: for i ∈ 0..X do `Vi := [I+i]`
+      | 0x65 =>
+        let mut gp_registers := chip8.gp_registers
+        let vxi := instr0.secondHalfFin
+        for vih: vi in [: vxi.val.succ] do
+          let i := chip8.index_register + vi.toUInt16
+          let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
+          let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
+          gp_registers := gp_registers.set vi' (chip8.ram.get (Fin.mk i.toNat ih))
+        pure { chip8 with gp_registers }
+
+      | _ => badInstr
 
     | _ => badInstr
 
@@ -340,10 +369,10 @@ def Chip8.render {cfg} (chip8 : Chip8 cfg) (rect : Raylib.Rectangle) : BaseIO Un
       let color := if displayByte > 0 then cfg.color1 else cfg.color0
       Raylib.DrawRectangleV (Raylib.Vector2.mk x y) (Raylib.Vector2.mk cellW cellH) color
 
-def Chip8.load (cfg : Config) (rom : ByteVector (cfg.ramSize.toNat - ramPrefixSize.toNat)) : Chip8 cfg :=
+def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : ByteVector (cfg.ramSize.toNat - ramPrefixSize.toNat)) : Chip8 cfg :=
   let zeroed: Chip8 cfg := default
   { zeroed with
-    ram := ((ByteVector.replicate (n := ramPrefixSize.toNat) 0).append rom).subst $ Nat.add_sub_of_le cfg.ramSize_prefix
+    ram := (pre.append rom).subst $ Nat.add_sub_of_le cfg.ramSize_prefix
     program_counter := ramPrefixSize
   }
 

@@ -10,6 +10,8 @@ inductive Error where
   | SpriteDataOutOfBounds
   | DecimalDigitsIndexOutOfBounds
   | KeyOutOfRange
+  | MemStoreOutOfRange
+  | MemLoadOutOfRange
 
 instance : ToString Error where
   toString
@@ -20,6 +22,8 @@ instance : ToString Error where
     | Error.SpriteDataOutOfBounds => "Sprite data out of bounds"
     | Error.DecimalDigitsIndexOutOfBounds => "Decimal digit's index out of bounds"
     | Error.KeyOutOfRange => "Key out of range"
+    | Error.MemStoreOutOfRange => "Attempted to store data in memory at invalid index"
+    | Error.MemLoadOutOfRange => "Attempted to load data from memory at invalid index"
 
 def badInstruction [MonadExcept Error m] (high low : UInt8) : m α :=
   throw $ Error.BadInstruction $ high.toHex ++ low.toHex

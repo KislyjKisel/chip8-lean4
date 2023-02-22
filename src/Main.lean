@@ -31,45 +31,47 @@ def main : IO Unit := do
   let cfg: Chip8.Config := default
   let cpuInterval : Float := 1 / cfg.instructions_per_sec
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
-  let rom ← LoadFileData "IBM Logo.ch8"
+  let ramPrefix ← LoadFileData "prefix.bin"
+  let rom ← LoadFileData "tetris.rom"
   if rom_fits: rom.size ≤ cfg.ramSize.toNat - Chip8.ramPrefixSize.toNat then {
-    let romPadded := (ByteVector.fromArray rom).padRight rom_fits 0
-    let mut chip8 := Chip8.load cfg romPadded
-    let mut timersTimer := Timer.new timerInterval
-    let mut cpuTimer := Timer.new cpuInterval
-    repeat do
-      let deltaTime ← GetFrameTime
+    if ramPrefix_size: ramPrefix.size = Chip8.ramPrefixSize.toNat then {
+      let romPadded := (ByteVector.fromArray rom).padRight rom_fits 0
+      let mut chip8 := Chip8.load cfg (Subtype.mk ramPrefix ramPrefix_size) romPadded
+      let mut timersTimer := Timer.new timerInterval
+      let mut cpuTimer := Timer.new cpuInterval
+      repeat do
+        let deltaTime ← GetFrameTime
 
-      -- Decrement delay and sound timers (todo: emit sound)
-      (timersTimer, chip8) := timersTimer.update deltaTime chip8 (m := Id) λ chip8 ↦ do
-        let chip8 := if chip8.delay_timer > 0 then { chip8 with delay_timer := chip8.delay_timer - 1 } else chip8
-        if chip8.sound_timer > 0 then ({ chip8 with sound_timer := chip8.sound_timer - 1 }) else chip8
+        -- Decrement delay and sound timers (todo: emit sound)
+        (timersTimer, chip8) := timersTimer.update deltaTime chip8 (m := Id) λ chip8 ↦ do
+          let chip8 := if chip8.delay_timer > 0 then { chip8 with delay_timer := chip8.delay_timer - 1 } else chip8
+          if chip8.sound_timer > 0 then ({ chip8 with sound_timer := chip8.sound_timer - 1 }) else chip8
 
-      chip8 ← chip8.setKeys key
+        chip8 ← chip8.setKeys key
 
-      -- Execute an instruction for each CPU timer tick since the last frame
-      (cpuTimer, chip8) ← MonadExcept.ofExcept $
-        (cpuTimer.update deltaTime chip8 (m := Except Chip8.Error) Chip8.step).mapError
-        (IO.userError ∘ toString)
+        -- Execute an instruction for each CPU timer tick since the last frame
+        (cpuTimer, chip8) ← MonadExcept.ofExcept $
+          (cpuTimer.update deltaTime chip8 (m := Except Chip8.Error) Chip8.step).mapError
+          (IO.userError ∘ toString)
 
-      let (screenW, screenH) := ((← GetScreenWidth), (← GetScreenHeight))
-      BeginDrawing
-      ClearBackground Raylib.BLANK
-      chip8.render (Rectangle.mk 0 0 screenW.toUInt64.toFloat screenH.toUInt64.toFloat)
-      EndDrawing
+        let (screenW, screenH) := ((← GetScreenWidth), (← GetScreenHeight))
+        BeginDrawing
+        ClearBackground Raylib.BLANK
+        chip8.render (Rectangle.mk 0 0 screenW.toUInt64.toFloat screenH.toUInt64.toFloat)
+        EndDrawing
 
-      if (← IsKeyPressed KEY_F) && (← IsKeyDown KEY_LEFT_ALT) then {
-        ToggleFullscreen
-        if (← IsWindowFullscreen)
-          then HideCursor
-          else ShowCursor
-      }
+        if (← IsKeyPressed KEY_F) && (← IsKeyDown KEY_LEFT_ALT) then {
+          ToggleFullscreen
+          if (← IsWindowFullscreen)
+            then HideCursor
+            else ShowCursor
+        }
 
-      if (← WindowShouldClose)
-        then break
-        else continue
+        if (← WindowShouldClose)
+          then break
+          else continue
+    }
+    else IO.println "Ram prefix has wrong size"
   }
-  else {
-    IO.println "ROM too big"
-  }
+  else IO.println "ROM too big"
   CloseWindow
