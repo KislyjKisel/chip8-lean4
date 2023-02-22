@@ -60,7 +60,7 @@ def main : IO Unit := do
         chip8.render (Rectangle.mk 0 0 screenW.toUInt64.toFloat screenH.toUInt64.toFloat)
         EndDrawing
 
-        if (← IsKeyPressed KEY_F) && (← IsKeyDown KEY_LEFT_ALT) then {
+        if (← IsKeyPressed KEY_ENTER) && (← IsKeyDown KEY_LEFT_ALT) then {
           ToggleFullscreen
           if (← IsWindowFullscreen)
             then HideCursor
