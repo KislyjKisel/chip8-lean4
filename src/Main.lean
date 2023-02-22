@@ -32,7 +32,7 @@ def main : IO Unit := do
   let cpuInterval : Float := 1 / cfg.instructions_per_sec
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
   let ramPrefix ← LoadFileData "prefix.bin"
-  let rom ← LoadFileData "tetris.rom"
+  let rom ← LoadFileData "chip8-test-suite.ch8"
   if rom_fits: rom.size ≤ cfg.ramSize.toNat - Chip8.ramPrefixSize.toNat then {
     if ramPrefix_size: ramPrefix.size = Chip8.ramPrefixSize.toNat then {
       let romPadded := (ByteVector.fromArray rom).padRight rom_fits 0
@@ -59,6 +59,8 @@ def main : IO Unit := do
         ClearBackground Raylib.BLANK
         chip8.render (Rectangle.mk 0 0 screenW.toUInt64.toFloat screenH.toUInt64.toFloat)
         EndDrawing
+
+        chip8 := chip8.runDisplay
 
         if (← IsKeyPressed KEY_ENTER) && (← IsKeyDown KEY_LEFT_ALT) then {
           ToggleFullscreen

@@ -11,7 +11,7 @@ def toHex (n : UInt8) :=
   hexDigitRepr (n >>> halfWidth).toNat ++ hexDigitRepr (n &&& halfMask).toNat
 
 def firstHalf (byte : UInt8) : UInt8 :=
-  (byte >>> halfWidth) &&& halfMask
+  byte >>> halfWidth
 
 def secondHalf (byte : UInt8) : UInt8 :=
   byte &&& halfMask

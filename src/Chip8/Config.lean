@@ -44,6 +44,20 @@ structure Config where
   Controls `I` changes during [FX55] and [FX65].
   -/
   quirkMemIndex : QuirkMemIndex := QuirkMemIndex.AddX1
+  /--
+  Controls the behavior of bitwise operators [8XY1] (AND), [8XY2] (OR) and [8XY3] (XOR).
+  `false`: `VF` is not affected.
+  `true`: `VF` is set to zero.
+  -/
+  quirkBitwiseFlag : Bool := true
+  /--
+  Wait for screen refresh before executing [DXYN] (Display) instruction.
+  -/
+  quirkDisplayInt : Bool := true
+  /--
+  Whether [FX0A] (Get Key) waits for the key to be released.
+  -/
+  quirkGetKeyRel : Bool := true
   /-- Adds [00FD] instruction: exit -/
   extExit : Bool := false
 
