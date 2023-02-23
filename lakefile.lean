@@ -15,7 +15,7 @@ package chip8 {
 }
 
 lean_lib Chip8 {
-  roots := #["Chip8", "Timer"]
+  roots := #["Chip8", "Util"]
 }
 
 @[default_target]

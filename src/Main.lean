@@ -1,6 +1,6 @@
 import Raylib
 import Chip8
-import Timer
+import Util
 
 open Raylib
 
@@ -24,15 +24,19 @@ def key (k : Fin 16) : IO Bool :=
     | ⟨ 0xF, _ ⟩ => IsKeyDown KEY_V
     | _ => unreachable! -- howto?
 
-def main : IO Unit := do
+def main (args : List String) : IO Unit := do
+  if Option.isSome $ args.find? (· == "--help") then {
+    IO.println "Unhelpful"
+    return
+  }
+  let (romName, cfg) ← parseArgs args
   SetConfigFlags $ FLAG_VSYNC_HINT ||| FLAG_WINDOW_RESIZABLE
   InitWindow 640 480 "chip8 interpreter"
   SetExitKey KEY_NULL
-  let cfg: Chip8.Config := default
   let cpuInterval : Float := 1 / cfg.instructions_per_sec
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
   let ramPrefix ← LoadFileData "prefix.bin"
-  let rom ← LoadFileData "chip8-test-suite.ch8"
+  let rom ← LoadFileData romName
   let rnd_gen := mkStdGen $ UInt64.toNat $ ByteArray.toUInt64LE! $ ← IO.getRandomBytes 8
   if rom_fits: rom.size ≤ cfg.ramSize.toNat - Chip8.ramPrefixSize.toNat then {
     if ramPrefix_size: ramPrefix.size = Chip8.ramPrefixSize.toNat then {
@@ -74,7 +78,7 @@ def main : IO Unit := do
           then break
           else continue
     }
-    else IO.println "Ram prefix has wrong size"
+    else TraceLog' LOG_ERROR "Ram prefix has wrong size"
   }
-  else IO.println "ROM too big"
+  else TraceLog' LOG_ERROR "ROM too big"
   CloseWindow
