@@ -4,6 +4,9 @@ import Util
 
 open Raylib
 
+@[extern "lean_chip8_AudioStream_setSine"]
+opaque Raylib.AudioStream.setSine (stream : @& AudioStream) : BaseIO Unit
+
 def key (k : Fin 16) : IO Bool :=
   match k with
     | ⟨ 0x0, _ ⟩ => IsKeyDown KEY_X
@@ -29,9 +32,14 @@ def main (args : List String) : IO Unit := do
     IO.println "Unhelpful"
     return
   }
-  let (romName, cfg) ← parseArgs args
+  let (romName, volume, cfg) ← parseArgs args
   SetConfigFlags $ FLAG_VSYNC_HINT ||| FLAG_WINDOW_RESIZABLE
   InitWindow 640 480 "chip8 interpreter"
+  InitAudioDevice
+  let audioStream ← LoadAudioStream 44100 16 1
+  SetMasterVolume $ Float.div (Nat.min 100 $ volume.max 0).toFloat 100.0
+  PlayAudioStream audioStream
+  audioStream.setSine
   SetExitKey KEY_NULL
   let cpuInterval : Float := 1 / cfg.instructions_per_sec
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
@@ -51,6 +59,12 @@ def main (args : List String) : IO Unit := do
         (timersTimer, chip8) := timersTimer.update deltaTime chip8 (m := Id) λ chip8 ↦ do
           let chip8 := if chip8.delay_timer > 0 then { chip8 with delay_timer := chip8.delay_timer - 1 } else chip8
           if chip8.sound_timer > 0 then ({ chip8 with sound_timer := chip8.sound_timer - 1 }) else chip8
+
+        if chip8.sound_timer > 0
+          then do
+            ResumeAudioStream audioStream
+          else do
+            PauseAudioStream audioStream
 
         chip8 ← chip8.setKeys key
 
@@ -81,4 +95,5 @@ def main (args : List String) : IO Unit := do
     else TraceLog' LOG_ERROR "Ram prefix has wrong size"
   }
   else TraceLog' LOG_ERROR "ROM too big"
+  CloseAudioDevice
   CloseWindow

@@ -18,6 +18,7 @@ structure Args where
   quirkBitwiseFlag : Option Bool
   quirkDisplayInt : Option Bool
   quirkGetKeyRel : Option Bool
+  volume : Option Nat
 
 deriving Inhabited
 
@@ -28,6 +29,18 @@ def aux (rest : Except String Args) (name : String) (view : Args → Option α) 
   if (view ps).isSome
     then throw s!"Argument specified multiple times: {name}"
     else pure $ set ps
+
+private
+def auxOpt
+  (rest : Except String Args)
+  (name : String)
+  (view : Args → Option α)
+  (val : Option α)
+  (set : α → Args → Args)
+  : Except String Args := do
+  match val with
+    | none => throw s!"can't parse: {name}"
+    | some val => aux rest name view $ set val
 
 private
 def parseColor (src : String) : Option Raylib.Color :=
@@ -63,6 +76,10 @@ def parseArgs' (args : List String) : Except String Args :=
   match args with
     | [] => pure default
 
+    | "--volume" :: volume :: as =>
+      auxOpt (parseArgs' as) "volume" Args.volume volume.toNat?
+        λ vol as ↦ { as with volume := some vol }
+
     | "--ram" :: ram :: as =>
       match ram.toNat? with
       | some ram =>
@@ -77,46 +94,29 @@ def parseArgs' (args : List String) : Except String Args :=
       | none => throw "can't parse: ram size"
 
     | "--ips" :: ips :: as =>
-      match ips.toNat? with
-        | some ips => aux (parseArgs' as) "instructions per second" Args.instructions_per_sec λ as ↦ { as with
-          instructions_per_sec := some ips.toFloat
-        }
-        | none => throw "can't parse: instructions per second"
+      auxOpt (parseArgs' as) "instructions per second" Args.instructions_per_sec
+        (ips.toNat?.map Nat.toFloat)
+        λ ips as ↦ { as with instructions_per_sec := some ips }
 
     | "--stack" :: stack :: as =>
-      match stack.toNat? with
-        | some stack => aux (parseArgs' as) "stack size" Args.stackSize λ as ↦ { as with
-          stackSize := stack
-        }
-        | none => throw "can't parse: stack size"
+      auxOpt (parseArgs' as) "stack size" Args.stackSize stack.toNat?
+        λ stack as ↦ { as with stackSize := stack }
 
     | "--dw" :: dw :: as =>
-      match dw.toNat? with
-        | some dw => aux (parseArgs' as) "display width" Args.displayWidth λ as ↦ { as with
-          displayWidth := some dw
-        }
-        | none => throw "can't parse: display width"
+      auxOpt (parseArgs' as) "display width" Args.displayWidth dw.toNat?
+        λ dw as ↦ { as with displayWidth := dw }
 
     | "--dh" :: dh :: as =>
-      match dh.toNat? with
-        | some dh => aux (parseArgs' as) "display height" Args.displayHeight λ as ↦ { as with
-          displayHeight := some dh
-        }
-        | none => throw "can't parse: display height"
+      auxOpt (parseArgs' as) "display height" Args.displayHeight dh.toNat?
+        λ dh as ↦ { as with displayHeight := dh }
 
     | "--c0" :: c0 :: as =>
-      match parseColor c0 with
-        | some c0 => aux (parseArgs' as) "color 0" Args.color0 λ as ↦ { as with
-          color0 := some c0
-        }
-        | none => throw "can't parse: color 0"
+      auxOpt (parseArgs' as) "color 0" Args.color0 (parseColor c0)
+        λ c0 as ↦ { as with color0 := c0 }
 
     | "--c1" :: c1 :: as =>
-      match parseColor c1 with
-        | some c1 => aux (parseArgs' as) "color 1" Args.color1 λ as ↦ { as with
-          color1 := some c1
-        }
-        | none => throw "can't parse: color 0"
+      auxOpt (parseArgs' as) "color 1" Args.color1 (parseColor c1)
+        λ c1 as ↦ { as with color1 := c1 }
 
     | "--Qjump-offset" :: as =>
       aux (parseArgs' as) "quirk 'jump with offset uses VX'" Args.quirkJumpOffset λ as ↦ { as with
@@ -200,7 +200,7 @@ def parseArgs' (args : List String) : Except String Args :=
         romName := some rom
       }
 
-def parseArgs (args : List String) : IO (String × Chip8.Config) :=
+def parseArgs (args : List String) : IO (String × Nat × Chip8.Config) :=
   IO.ofExcept $ match parseArgs' args with
     | Except.error e => throw $ IO.userError s!"Can't parse arguments: {e}"
     | Except.ok args => do
@@ -208,8 +208,9 @@ def parseArgs (args : List String) : IO (String × Chip8.Config) :=
         | none => throw $ IO.userError "ROM file name not specified"
         | some r => pure r
       );
+      let volume := args.volume.getD 30
       let zero: Chip8.Config := default
-      pure (romName, { zero with
+      pure (romName, volume, { zero with
         instructions_per_sec := args.instructions_per_sec.getD zero.instructions_per_sec
         ramSizeS := args.ramSize.getD zero.ramSizeS
         stackSize := args.stackSize.getD zero.stackSize
