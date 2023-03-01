@@ -24,13 +24,13 @@ structure Chip8 (cfg : Chip8.Config) where
   ram : ByteVector cfg.ramSize.toNat
   stack : Array UInt16
   display : ByteVector (cfg.displayWidth * cfg.displayHeight)
-  gp_registers : Vector UInt8 UInt8.halfSize
-  program_counter : UInt16
-  index_register : UInt16
-  delay_timer : UInt8
-  sound_timer : UInt8
-  random_gen : StdGen
-  keys : Vector Bool UInt8.halfSize
+  gpRegisters : Vector UInt8 UInt8.halfSize
+  programCounter : UInt16
+  indexRegister : UInt16
+  delayTimer : UInt8
+  soundTimer : UInt8
+  randomGenerator : StdGen
+  keyboardState : Vector Bool UInt8.halfSize
   displayCall : Option $ Chip8.DisplayCall cfg
   awaitedKey : Option (Fin UInt8.halfSize)
 deriving Inhabited
@@ -59,7 +59,7 @@ def Chip8.runDisplay {cfg} (chip8 : Chip8 cfg) : Chip8 cfg := Id.run $ do
       else break
     pure { chip8 with
       display := display
-      gp_registers := chip8.gp_registers.set (Fin.mk 0xF $ by decide) vf
+      gpRegisters := chip8.gpRegisters.set (Fin.mk 0xF $ by decide) vf
       displayCall := none
     }
   else
@@ -70,7 +70,7 @@ def Chip8.awaitKey {cfg} (chip8 : Chip8 cfg) : Option $ Chip8 cfg := do
     then
       if let some awkey := chip8.awaitedKey
         then
-          if chip8.keys.get awkey
+          if chip8.keyboardState.get awkey
             then none
             else some { chip8 with awaitedKey := none }
         else some chip8
@@ -79,7 +79,7 @@ def Chip8.awaitKey {cfg} (chip8 : Chip8 cfg) : Option $ Chip8 cfg := do
 def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
   if chip8.displayCall.isSome then return chip8;
   if let some chip8 := chip8.awaitKey then {
-    let pc0 := chip8.program_counter
+    let pc0 := chip8.programCounter
     let pc1 := pc0 + 1
     let pc0Valid := PLift.down $
       ← MonadExcept.check (pc0 < cfg.ramSize) Error.ProgramCounterOutOfRange
@@ -93,7 +93,7 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
     -- if (dbgTrace s!"PC: {pc0}  I: {instr0.toHex} {instr1.toHex}" (λ _ ↦ false))
     --   then unreachable!;
     let chip8 := { chip8 with
-      program_counter := chip8.program_counter + 2
+      programCounter := chip8.programCounter + 2
     }
     match nibble0 with
       | 0x0 =>
@@ -111,7 +111,7 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
                   let pc := chip8.stack.get $
                     Fin.mk chip8.stack.size.pred (Nat.pred_lt stackNonEmpty)
                   pure { chip8 with
-                    program_counter := pc
+                    programCounter := pc
                     stack := chip8.stack.pop
                   }
                 else
@@ -131,7 +131,7 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
         let nibble1 := instr0 &&& 0x0F
         let addr := (nibble1.toUInt16 <<< 8) ||| instr1.toUInt16
         pure { chip8
-          with program_counter := addr
+          with programCounter := addr
         }
 
       -- [2NNN] Call: Set `PC` to `NNN` pushing old `PC` to stack
@@ -140,16 +140,16 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
         let addr := (nibble1.toUInt16 <<< 8) ||| instr1.toUInt16
         if chip8.stack.size < cfg.stackSize
           then pure { chip8 with
-            stack := chip8.stack.push chip8.program_counter
-            program_counter := addr
+            stack := chip8.stack.push chip8.programCounter
+            programCounter := addr
           }
           else throw Error.StackOverflow
 
       -- [3XNN] if `VX` equals `NN` then `PC := PC + 2`
       -- [4XNN] if `VX` *not* equals `NN` then `PC := PC + 2`
       | 0x3 | 0x4 => pure $
-        if (chip8.gp_registers.get instr0.secondHalfFin == instr1) == (nibble0 == 0x3)
-          then { chip8 with program_counter := chip8.program_counter + 2 }
+        if (chip8.gpRegisters.get instr0.secondHalfFin == instr1) == (nibble0 == 0x3)
+          then { chip8 with programCounter := chip8.programCounter + 2 }
           else chip8
 
       -- [5XY0] if `VX` equals `NN` then `PC := PC + 2`
@@ -157,10 +157,10 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
       | 0x5 | 0x9 => do
         if instr1.secondHalf == 0
           then
-            let vx := chip8.gp_registers.get instr0.secondHalfFin
-            let vy := chip8.gp_registers.get instr1.firstHalfFin
+            let vx := chip8.gpRegisters.get instr0.secondHalfFin
+            let vy := chip8.gpRegisters.get instr1.firstHalfFin
             pure $ if (vx == vy) == (nibble0 == 0x5)
-              then { chip8 with program_counter := chip8.program_counter + 2 }
+              then { chip8 with programCounter := chip8.programCounter + 2 }
               else chip8
           else
             badInstr
@@ -169,65 +169,65 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
       | 0x6 =>
         let nibble1 := instr0.secondHalfFin
         pure { chip8 with
-          gp_registers := chip8.gp_registers.set nibble1 instr1
+          gpRegisters := chip8.gpRegisters.set nibble1 instr1
         }
 
       -- [7XNN] Add `NN` to `VX`
       | 0x7 =>
         let nibble1 := instr0.secondHalfFin
         pure { chip8 with
-          gp_registers := chip8.gp_registers.modify nibble1 (· + instr1)
+          gpRegisters := chip8.gpRegisters.modify nibble1 (· + instr1)
         }
 
       -- Binary operators
       | 0x8 =>
         let vxi := instr0.secondHalfFin
         let vyi := instr1.firstHalfFin
-        let vx := chip8.gp_registers.get vxi
-        let vy := chip8.gp_registers.get vyi
+        let vx := chip8.gpRegisters.get vxi
+        let vy := chip8.gpRegisters.get vyi
         match instr1.secondHalf with
           -- [8XY0] Assignment: `VX := VY`
           | 0x0 => pure { chip8 with
-            gp_registers := chip8.gp_registers.set vxi vy
+            gpRegisters := chip8.gpRegisters.set vxi vy
           }
 
           -- [8XY1] Bitwise OR: `VX := VX ||| VY`
           | 0x1 =>
-            let gp_registers := chip8.gp_registers.set vxi (vx ||| vy)
+            let gpRegisters := chip8.gpRegisters.set vxi (vx ||| vy)
             pure $ if cfg.quirkBitwiseFlag
-              then { chip8 with gp_registers := gp_registers.set vfi 0 }
-              else { chip8 with gp_registers }
+              then { chip8 with gpRegisters := gpRegisters.set vfi 0 }
+              else { chip8 with gpRegisters }
 
           -- [8XY2] Bitwise AND: `VX := VX &&& VY`
           | 0x2 =>
-            let gp_registers := chip8.gp_registers.set vxi (vx &&& vy)
+            let gpRegisters := chip8.gpRegisters.set vxi (vx &&& vy)
             pure $ if cfg.quirkBitwiseFlag
-              then { chip8 with gp_registers := gp_registers.set vfi 0 }
-              else { chip8 with gp_registers }
+              then { chip8 with gpRegisters := gpRegisters.set vfi 0 }
+              else { chip8 with gpRegisters }
 
           -- [8XY3] Bitwise XOR: `VX := VX ^^^ VY`
           | 0x3 =>
-            let gp_registers := chip8.gp_registers.set vxi (vx ^^^ vy)
+            let gpRegisters := chip8.gpRegisters.set vxi (vx ^^^ vy)
             pure $ if cfg.quirkBitwiseFlag
-              then { chip8 with gp_registers := gp_registers.set vfi 0 }
-              else { chip8 with gp_registers }
+              then { chip8 with gpRegisters := gpRegisters.set vfi 0 }
+              else { chip8 with gpRegisters }
 
           -- [8XY4] Add: `VX := VX + VY` (affecting carry flag)
           | 0x4 =>
             pure { chip8 with
-              gp_registers := (chip8.gp_registers.set vxi (vx + vy)).set
+              gpRegisters := (chip8.gpRegisters.set vxi (vx + vy)).set
                 vfi (decide $ 255 - vx < vy).toUInt8
             }
 
           -- [8XY5] Subtract: `VX := VX - VY`
           | 0x5 => pure { chip8 with
-            gp_registers := (chip8.gp_registers.set vxi (vx - vy)).set
+            gpRegisters := (chip8.gpRegisters.set vxi (vx - vy)).set
               vfi (decide $ vx > vy).toUInt8
           }
 
           -- [8XY7] Subtract: `VX := VY - VX`
           | 0x7 => pure { chip8 with
-            gp_registers := (chip8.gp_registers.set vxi (vy - vx)).set
+            gpRegisters := (chip8.gpRegisters.set vxi (vy - vx)).set
               vfi (decide $ vy > vx).toUInt8
           }
 
@@ -236,12 +236,12 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
             if cfg.quirkShift
               -- `VX := VX >>> 1`
               then { chip8 with
-                gp_registers := (chip8.gp_registers.set vxi $ vx >>> 1).set
+                gpRegisters := (chip8.gpRegisters.set vxi $ vx >>> 1).set
                   vfi (vx &&& 1)
               }
               -- `VX := VY >>> 1`
               else { chip8 with
-                gp_registers := (chip8.gp_registers.set vxi $ vy >>> 1).set
+                gpRegisters := (chip8.gpRegisters.set vxi $ vy >>> 1).set
                   vfi (vy &&& 1)
               }
 
@@ -250,12 +250,12 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
             if cfg.quirkShift
               -- `VX := VX <<< 1`
               then { chip8 with
-                gp_registers := (chip8.gp_registers.set vxi $ vx <<< 1).set
+                gpRegisters := (chip8.gpRegisters.set vxi $ vx <<< 1).set
                   vfi (vx >>> 7)
               }
               -- `VX := VY <<< 1`
               else { chip8 with
-                gp_registers := (chip8.gp_registers.set vxi $ vy <<< 1).set
+                gpRegisters := (chip8.gpRegisters.set vxi $ vy <<< 1).set
                   vfi (vx >>> 7)
               }
 
@@ -266,37 +266,37 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
       | 0xA =>
         let nibble1 := instr0 &&& 0x0F
         let addr := (nibble1.toUInt16 <<< 8) ||| instr1.toUInt16
-        pure { chip8 with index_register := addr }
+        pure { chip8 with indexRegister := addr }
 
       -- [BNNN] Jump with offset
       | 0xB =>
         let addr := (instr0.secondHalf.toUInt16 <<< 8) ||| instr1.toUInt16
         pure { chip8 with
-          program_counter := if cfg.quirkJumpOffset
+          programCounter := if cfg.quirkJumpOffset
             -- Set `PC` to `NNN` + `VX`
-            then addr + (chip8.gp_registers.get instr0.secondHalfFin).toUInt16
+            then addr + (chip8.gpRegisters.get instr0.secondHalfFin).toUInt16
             -- Set `PC` to `NNN` + `V0`
-            else addr + (chip8.gp_registers.get (Fin.mk 0 (by decide))).toUInt16
+            else addr + (chip8.gpRegisters.get (Fin.mk 0 (by decide))).toUInt16
         }
 
       -- [CXNN] Random `VX := (← random) &&& NN`
       | 0xC =>
         let vxi := instr0.secondHalfFin
-        let (value, rnd_gen) := RandomGen.next chip8.random_gen
+        let (value, rnd_gen) := RandomGen.next chip8.randomGenerator
         pure { chip8 with
-          gp_registers := chip8.gp_registers.set vxi (value.toUInt8 &&& instr1)
-          random_gen := rnd_gen
+          gpRegisters := chip8.gpRegisters.set vxi (value.toUInt8 &&& instr1)
+          randomGenerator := rnd_gen
         }
 
       -- [DXYN] Display at (`VX`, `VY`) the sprite at in ram at `I`, `N` bytes high
       | 0xD => do
         let nibble1 := instr0.secondHalfFin
         let nibble2 := instr1.firstHalfFin
-        let x0 := (chip8.gp_registers.get nibble1).toNat % cfg.displayWidth
-        let y0 := (chip8.gp_registers.get nibble2).toNat % cfg.displayHeight
+        let x0 := (chip8.gpRegisters.get nibble1).toNat % cfg.displayWidth
+        let y0 := (chip8.gpRegisters.get nibble2).toNat % cfg.displayHeight
         let nibble3 := instr1.secondHalf.toUInt16
-        let idx0 := chip8.index_register
-        let idx1 := chip8.index_register + nibble3
+        let idx0 := chip8.indexRegister
+        let idx1 := chip8.indexRegister + nibble3
         let _ := ← MonadExcept.check (idx0 < cfg.ramSize) Error.SpriteDataOutOfBounds
         let idx1Valid := (← MonadExcept.check (idx1 ≤ cfg.ramSize) Error.SpriteDataOutOfBounds).down
         let chip8 := { chip8 with
@@ -310,10 +310,10 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
         -- [EX9E] if key `VX` is pressed then `PC := PC + 2`
         -- [EXA1] if key `VX` is *not* pressed then `PC := PC + 2`
         | 0x9E | 0xA1 =>
-          let vx := chip8.gp_registers.get instr0.secondHalfFin
+          let vx := chip8.gpRegisters.get instr0.secondHalfFin
           if h: vx.toNat < UInt8.halfSize
-            then pure $ if chip8.keys.get (Fin.mk vx.toNat h) == (instr1 == 0x9E)
-              then { chip8 with program_counter := chip8.program_counter + 2 }
+            then pure $ if chip8.keyboardState.get (Fin.mk vx.toNat h) == (instr1 == 0x9E)
+              then { chip8 with programCounter := chip8.programCounter + 2 }
               else chip8
             else throw Error.KeyOutOfRange
 
@@ -322,51 +322,51 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
       | 0xF => match instr1 with
         -- [FX07] Set `VX` to `DT`
         | 0x07 => pure { chip8 with
-          gp_registers := chip8.gp_registers.set instr0.secondHalfFin chip8.delay_timer
+          gpRegisters := chip8.gpRegisters.set instr0.secondHalfFin chip8.delayTimer
         }
 
         -- [FX15] Set `DT` to `VX`
         | 0x15 => pure { chip8 with
-          delay_timer := chip8.gp_registers.get instr0.secondHalfFin
+          delayTimer := chip8.gpRegisters.get instr0.secondHalfFin
         }
 
         -- [FX18] Set `ST` to `VX`
         | 0x18 => pure { chip8 with
-          sound_timer := chip8.gp_registers.get instr0.secondHalfFin
+          soundTimer := chip8.gpRegisters.get instr0.secondHalfFin
         }
 
         -- [FX1E] `I := I + VX`
         | 0x1E =>
-          let i': UInt16 := chip8.index_register + (chip8.gp_registers.get instr0.secondHalfFin).toUInt16
+          let i': UInt16 := chip8.indexRegister + (chip8.gpRegisters.get instr0.secondHalfFin).toUInt16
           pure $ if cfg.quirkIndexAdd && i' ≥ 0x1000
-            then { chip8 with index_register := i', gp_registers := chip8.gp_registers.set vfi 1 }
-            else { chip8 with index_register := i' }
+            then { chip8 with indexRegister := i', gpRegisters := chip8.gpRegisters.set vfi 1 }
+            else { chip8 with indexRegister := i' }
 
         -- [FX0A] Wait for key input, then write pressed key index to `VX`
         | 0x0A => pure $
-          match chip8.keys.indexOf? true with
+          match chip8.keyboardState.indexOf? true with
             | some k => { chip8 with
               awaitedKey := some k
-              gp_registers := chip8.gp_registers.set instr0.secondHalfFin $ 
+              gpRegisters := chip8.gpRegisters.set instr0.secondHalfFin $ 
                 UInt8.mk $ Fin.mk k.val $ k.isLt.trans $ by decide
             }
-            | none => { chip8 with program_counter := pc0 }
+            | none => { chip8 with programCounter := pc0 }
 
         -- [FX29] Store builtin font char ram offset in `I`
         | 0x29 =>
           pure { chip8 with
-            index_register := fontOffset + (chip8.gp_registers.get instr0.secondHalfFin).secondHalf.toUInt16 * fontSize
+            indexRegister := fontOffset + (chip8.gpRegisters.get instr0.secondHalfFin).secondHalf.toUInt16 * fontSize
           }
 
         -- [FX33] Store decimal digits of `VX` in (big endian) `[I]`, `[I+1]`, `[I+2]`.
         | 0x33 =>
-          let i0 := chip8.index_register
+          let i0 := chip8.indexRegister
           let i1 := i0 + 1
           let i2 := i0 + 2
           let i0h := (← MonadExcept.check (i0 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
           let i1h := (← MonadExcept.check (i1 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
           let i2h := (← MonadExcept.check (i2 < cfg.ramSize) Error.DecimalDigitsIndexOutOfBounds).down
-          let vx := chip8.gp_registers.get instr0.secondHalfFin
+          let vx := chip8.gpRegisters.get instr0.secondHalfFin
           pure { chip8 with
             ram := chip8.ram
               |> λ ram ↦ .set ram (Fin.mk i0.val i0h) (vx / 100)
@@ -379,33 +379,33 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
           let mut ram := chip8.ram
           let vxi := instr0.secondHalfFin
           for vih: vi in [: vxi.val.succ] do
-            let i := chip8.index_register + vi.toUInt16
+            let i := chip8.indexRegister + vi.toUInt16
             let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
             let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
-            ram := ram.set (Fin.mk i.toNat ih) $ chip8.gp_registers.get vi'
+            ram := ram.set (Fin.mk i.toNat ih) $ chip8.gpRegisters.get vi'
           pure { chip8 with
             ram
-            index_register := match cfg.quirkMemIndex with
-              | QuirkMemIndex.Keep => chip8.index_register
-              | QuirkMemIndex.AddX => chip8.index_register + instr0.secondHalf.toUInt16
-              | QuirkMemIndex.AddX1 => chip8.index_register + instr0.secondHalf.toUInt16 + 1
+            indexRegister := match cfg.quirkMemIndex with
+              | QuirkMemIndex.Keep => chip8.indexRegister
+              | QuirkMemIndex.AddX => chip8.indexRegister + instr0.secondHalf.toUInt16
+              | QuirkMemIndex.AddX1 => chip8.indexRegister + instr0.secondHalf.toUInt16 + 1
           }
 
         -- [FX65] Load: for i ∈ 0..X do `Vi := [I+i]`
         | 0x65 =>
-          let mut gp_registers := chip8.gp_registers
+          let mut gpRegisters := chip8.gpRegisters
           let vxi := instr0.secondHalfFin
           for vih: vi in [: vxi.val.succ] do
-            let i := chip8.index_register + vi.toUInt16
+            let i := chip8.indexRegister + vi.toUInt16
             let ih := (← MonadExcept.check (i < cfg.ramSize) Error.MemStoreOutOfRange).down
             let vi' := Fin.mk vi (vih.upper.trans_le $ Nat.succ_le_of_lt vxi.isLt)
-            gp_registers := gp_registers.set vi' (chip8.ram.get (Fin.mk i.toNat ih))
+            gpRegisters := gpRegisters.set vi' (chip8.ram.get (Fin.mk i.toNat ih))
           pure { chip8 with
-            gp_registers
-            index_register := match cfg.quirkMemIndex with
-              | QuirkMemIndex.Keep => chip8.index_register
-              | QuirkMemIndex.AddX => chip8.index_register + instr0.secondHalf.toUInt16
-              | QuirkMemIndex.AddX1 => chip8.index_register + instr0.secondHalf.toUInt16 + 1
+            gpRegisters
+            indexRegister := match cfg.quirkMemIndex with
+              | QuirkMemIndex.Keep => chip8.indexRegister
+              | QuirkMemIndex.AddX => chip8.indexRegister + instr0.secondHalf.toUInt16
+              | QuirkMemIndex.AddX1 => chip8.indexRegister + instr0.secondHalf.toUInt16 + 1
           }
 
         | _ => badInstr
@@ -431,28 +431,28 @@ def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : Byte
   let zeroed: Chip8 cfg := default
   { zeroed with
     ram := (pre.append rom).subst $ Nat.add_sub_of_le cfg.ramSize_prefix
-    program_counter := ramPrefixSize
-    random_gen := rndg
+    programCounter := ramPrefixSize
+    randomGenerator := rndg
   }
 
 -- todo: loop :)
 def Chip8.setKeys {cfg} [Monad m] (chip8 : Chip8 cfg) (f : Fin UInt8.halfSize → m Bool) : m (Chip8 cfg) := do
   let aux ks i := f i >>= λ v ↦ pure $ Vector.set ks i v
-  let mut keys := Vector.replicate false
-  keys ← aux keys $ Fin.mk 0 $ by decide
-  keys ← aux keys $ Fin.mk 1 $ by decide
-  keys ← aux keys $ Fin.mk 2 $ by decide
-  keys ← aux keys $ Fin.mk 3 $ by decide
-  keys ← aux keys $ Fin.mk 4 $ by decide
-  keys ← aux keys $ Fin.mk 5 $ by decide
-  keys ← aux keys $ Fin.mk 6 $ by decide
-  keys ← aux keys $ Fin.mk 7 $ by decide
-  keys ← aux keys $ Fin.mk 8 $ by decide
-  keys ← aux keys $ Fin.mk 9 $ by decide
-  keys ← aux keys $ Fin.mk 10 $ by decide
-  keys ← aux keys $ Fin.mk 11 $ by decide
-  keys ← aux keys $ Fin.mk 12 $ by decide
-  keys ← aux keys $ Fin.mk 13 $ by decide
-  keys ← aux keys $ Fin.mk 14 $ by decide
-  keys ← aux keys $ Fin.mk 15 $ by decide
-  return { chip8 with keys }
+  let mut keyboardState := Vector.replicate false
+  keyboardState ← aux keyboardState $ Fin.mk 0 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 1 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 2 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 3 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 4 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 5 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 6 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 7 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 8 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 9 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 10 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 11 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 12 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 13 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 14 $ by decide
+  keyboardState ← aux keyboardState $ Fin.mk 15 $ by decide
+  return { chip8 with keyboardState }

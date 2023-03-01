@@ -57,10 +57,10 @@ def main (args : List String) : IO Unit := do
 
         -- Decrement delay and sound timers (todo: emit sound)
         (timersTimer, chip8) := timersTimer.update deltaTime chip8 (m := Id) λ chip8 ↦ do
-          let chip8 := if chip8.delay_timer > 0 then { chip8 with delay_timer := chip8.delay_timer - 1 } else chip8
-          if chip8.sound_timer > 0 then ({ chip8 with sound_timer := chip8.sound_timer - 1 }) else chip8
+          let chip8 := if chip8.delayTimer > 0 then { chip8 with delayTimer := chip8.delayTimer - 1 } else chip8
+          if chip8.soundTimer > 0 then ({ chip8 with soundTimer := chip8.soundTimer - 1 }) else chip8
 
-        if chip8.sound_timer > 0
+        if chip8.soundTimer > 0
           then do
             ResumeAudioStream audioStream
           else do
