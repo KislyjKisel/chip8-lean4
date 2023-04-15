@@ -69,14 +69,14 @@ def Config.ramSize_prefix (cfg : Config) : ramPrefixSize ≤ cfg.ramSize :=
 def presetCosmacVip : Config where
   instructions_per_sec := 600 -- roughly
   stackSize := 12
-  color0 := Raylib.BLACK
-  color1 := Raylib.GREEN
+  color0 := .black
+  color1 := .green
 
 instance instInhabitedConfig : Inhabited Config where
   default := { presetCosmacVip with
     quirkIndexAdd := true
     stackSize := 128
-    color1 := Raylib.RAYWHITE
+    color1 := .raywhite
   }
 
 end Chip8

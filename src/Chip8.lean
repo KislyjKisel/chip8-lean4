@@ -415,17 +415,17 @@ def Chip8.step {cfg} (chip8 : Chip8 cfg) : Except Error (Chip8 cfg) := do
   else pure chip8
 
 def Chip8.render {cfg} (chip8 : Chip8 cfg) (rect : Raylib.Rectangle) : BaseIO Unit := do
-  let cellW := rect.width / cfg.displayWidth.toFloat
-  let cellH := rect.height / cfg.displayHeight.toFloat
+  let cellW := rect.width / cfg.displayWidth.toFloat.toFloat32
+  let cellH := rect.height / cfg.displayHeight.toFloat.toFloat32
   for ih: i in [: cfg.displayHeight] do
-    let y := i.toFloat * cellH
+    let y := i.toFloat.toFloat32 * cellH
     let row_idx0 := i * cfg.displayWidth
     for jh: j in [: cfg.displayWidth] do
-      let x := j.toFloat * cellW
+      let x := j.toFloat.toFloat32 * cellW
       let idx := row_idx0 + j
       let displayByte := chip8.display.get (Fin.mk idx $ Nat.matrixLinearIndex_bound ih.upper jh.upper)
       let color := if displayByte > 0 then cfg.color1 else cfg.color0
-      Raylib.DrawRectangleV (Raylib.Vector2.mk x y) (Raylib.Vector2.mk cellW cellH) color
+      Raylib.drawRectangleV (Raymath.Vector2.mk x y) (Raymath.Vector2.mk cellW cellH) color
 
 def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : ByteVector (cfg.ramSize.toNat - ramPrefixSize.toNat)) (rndg : StdGen) : Chip8 cfg :=
   let zeroed: Chip8 cfg := default
@@ -435,24 +435,9 @@ def Chip8.load (cfg : Config) (pre : ByteVector ramPrefixSize.toNat) (rom : Byte
     randomGenerator := rndg
   }
 
--- todo: loop :)
-def Chip8.setKeys {cfg} [Monad m] (chip8 : Chip8 cfg) (f : Fin UInt8.halfSize → m Bool) : m (Chip8 cfg) := do
-  let aux ks i := f i >>= λ v ↦ pure $ Vector.set ks i v
+def Chip8.setKeys {cfg} [Monad m] (chip8 : Chip8 cfg) (isPressed : Fin UInt8.halfSize → m Bool) : m (Chip8 cfg) := do
   let mut keyboardState := Vector.replicate false
-  keyboardState ← aux keyboardState $ Fin.mk 0 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 1 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 2 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 3 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 4 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 5 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 6 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 7 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 8 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 9 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 10 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 11 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 12 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 13 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 14 $ by decide
-  keyboardState ← aux keyboardState $ Fin.mk 15 $ by decide
+  for h: i in [: 16] do
+    let key := Fin.mk i $ h.upper
+    keyboardState := keyboardState.set key (← isPressed key)
   return { chip8 with keyboardState }

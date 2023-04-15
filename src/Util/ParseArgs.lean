@@ -45,30 +45,30 @@ def auxOpt
 private
 def parseColor (src : String) : Option Raylib.Color :=
   match src.toLower with
-    | "lightgray" => some Raylib.LIGHTGRAY
-    | "gray" => some Raylib.GRAY
-    | "darkgray" => some Raylib.DARKGRAY
-    | "yellow" => some Raylib.YELLOW
-    | "gold" => some Raylib.GOLD
-    | "orange" => some Raylib.ORANGE
-    | "pink" => some Raylib.PINK
-    | "red" => some Raylib.RED
-    | "maroon" => some Raylib.MAROON
-    | "green" => some Raylib.GREEN
-    | "lime" => some Raylib.LIME
-    | "darkgreen" => some Raylib.DARKGREEN
-    | "skyblue" => some Raylib.SKYBLUE
-    | "blue" => some Raylib.BLUE
-    | "darkblue" => some Raylib.DARKBLUE
-    | "purple" => some Raylib.PURPLE
-    | "violet" => some Raylib.VIOLET
-    | "darkpurple" => some Raylib.DARKPURPLE
-    | "beige" => some Raylib.BEIGE
-    | "brown" => some Raylib.BROWN
-    | "darkbrown" => some Raylib.DARKBROWN
-    | "black" => some Raylib.BLACK
-    | "magenta" => some Raylib.MAGENTA
-    | "white" => some Raylib.RAYWHITE
+    | "lightgray" => some .lightgray
+    | "gray" => some .gray
+    | "darkgray" => some .darkgray
+    | "yellow" => some .yellow
+    | "gold" => some .gold
+    | "orange" => some .orange
+    | "pink" => some .pink
+    | "red" => some .red
+    | "maroon" => some .maroon
+    | "green" => some .green
+    | "lime" => some .lime
+    | "darkgreen" => some .darkgreen
+    | "skyblue" => some .skyblue
+    | "blue" => some .blue
+    | "darkblue" => some .darkblue
+    | "purple" => some .purple
+    | "violet" => some .violet
+    | "darkpurple" => some .darkpurple
+    | "beige" => some .beige
+    | "brown" => some .brown
+    | "darkbrown" => some .darkbrown
+    | "black" => some .black
+    | "magenta" => some .magenta
+    | "white" => some .raywhite
     | _other => none
 
 private

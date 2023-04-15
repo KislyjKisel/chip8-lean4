@@ -8,24 +8,24 @@ open Raylib
 opaque Raylib.AudioStream.setSine (stream : @& AudioStream) : BaseIO Unit
 
 def key (k : Fin 16) : IO Bool :=
-  match k with
-    | ⟨ 0x0, _ ⟩ => IsKeyDown KEY_X
-    | ⟨ 0x1, _ ⟩ => IsKeyDown KEY_ONE
-    | ⟨ 0x2, _ ⟩ => IsKeyDown KEY_TWO
-    | ⟨ 0x3, _ ⟩ => IsKeyDown KEY_THREE
-    | ⟨ 0x4, _ ⟩ => IsKeyDown KEY_Q
-    | ⟨ 0x5, _ ⟩ => IsKeyDown KEY_W
-    | ⟨ 0x6, _ ⟩ => IsKeyDown KEY_E
-    | ⟨ 0x7, _ ⟩ => IsKeyDown KEY_A
-    | ⟨ 0x8, _ ⟩ => IsKeyDown KEY_S
-    | ⟨ 0x9, _ ⟩ => IsKeyDown KEY_D
-    | ⟨ 0xA, _ ⟩ => IsKeyDown KEY_Z
-    | ⟨ 0xB, _ ⟩ => IsKeyDown KEY_C
-    | ⟨ 0xC, _ ⟩ => IsKeyDown KEY_FOUR
-    | ⟨ 0xD, _ ⟩ => IsKeyDown KEY_R
-    | ⟨ 0xE, _ ⟩ => IsKeyDown KEY_F
-    | ⟨ 0xF, _ ⟩ => IsKeyDown KEY_V
-    | _ => unreachable! -- howto?
+  isKeyDown $ match k with
+    | ⟨ 0x0, _ ⟩ => .x
+    | ⟨ 0x1, _ ⟩ => .one
+    | ⟨ 0x2, _ ⟩ => .two
+    | ⟨ 0x3, _ ⟩ => .three
+    | ⟨ 0x4, _ ⟩ => .q
+    | ⟨ 0x5, _ ⟩ => .w
+    | ⟨ 0x6, _ ⟩ => .e
+    | ⟨ 0x7, _ ⟩ => .a
+    | ⟨ 0x8, _ ⟩ => .s
+    | ⟨ 0x9, _ ⟩ => .d
+    | ⟨ 0xA, _ ⟩ => .z
+    | ⟨ 0xB, _ ⟩ => .c
+    | ⟨ 0xC, _ ⟩ => .four
+    | ⟨ 0xD, _ ⟩ => .r
+    | ⟨ 0xE, _ ⟩ => .f
+    | ⟨ 0xF, _ ⟩ => .v
+    | ⟨ n+0x10, h ⟩ => False.elim $ Nat.not_le_of_gt h $ Nat.le_add_left 16 n
 
 def main (args : List String) : IO Unit := do
   if Option.isSome $ args.find? (· == "--help") then {
@@ -33,18 +33,18 @@ def main (args : List String) : IO Unit := do
     return
   }
   let (romName, volume, cfg) ← parseArgs args
-  SetConfigFlags $ FLAG_VSYNC_HINT ||| FLAG_WINDOW_RESIZABLE
-  InitWindow 640 480 "chip8 interpreter"
-  InitAudioDevice
-  let audioStream ← LoadAudioStream 44100 16 1
-  SetMasterVolume $ Float.div (Nat.min 100 $ volume.max 0).toFloat 100.0
-  PlayAudioStream audioStream
+  setConfigFlags $ .vsyncHint ||| .windowResizable
+  initWindow 640 480 "chip8 interpreter"
+  initAudioDevice
+  let audioStream ← loadAudioStream 44100 16 1
+  setMasterVolume $ ((Nat.min 100 $ volume.max 0).toFloat / 100.0).toFloat32
+  playAudioStream audioStream
   audioStream.setSine
-  SetExitKey KEY_NULL
+  setExitKey .null
   let cpuInterval : Float := 1 / cfg.instructions_per_sec
   let timerInterval : Float := 1 / Chip8.timerTicksPerSec
-  let ramPrefix ← LoadFileData "prefix.bin"
-  let rom ← LoadFileData romName
+  let ramPrefix ← loadFileData "prefix.bin"
+  let rom ← loadFileData romName
   let rnd_gen := mkStdGen $ UInt64.toNat $ ByteArray.toUInt64LE! $ ← IO.getRandomBytes 8
   if rom_fits: rom.size ≤ cfg.ramSize.toNat - Chip8.ramPrefixSize.toNat then {
     if ramPrefix_size: ramPrefix.size = Chip8.ramPrefixSize.toNat then {
@@ -53,7 +53,7 @@ def main (args : List String) : IO Unit := do
       let mut timersTimer := Timer.new timerInterval
       let mut cpuTimer := Timer.new cpuInterval
       repeat do
-        let deltaTime ← GetFrameTime
+        let deltaTime := (← getFrameTime).toFloat
 
         -- Decrement delay and sound timers (todo: emit sound)
         (timersTimer, chip8) := timersTimer.update deltaTime chip8 (m := Id) λ chip8 ↦ do
@@ -62,9 +62,9 @@ def main (args : List String) : IO Unit := do
 
         if chip8.soundTimer > 0
           then do
-            ResumeAudioStream audioStream
+            resumeAudioStream audioStream
           else do
-            PauseAudioStream audioStream
+            pauseAudioStream audioStream
 
         chip8 ← chip8.setKeys key
 
@@ -73,27 +73,27 @@ def main (args : List String) : IO Unit := do
           (cpuTimer.update deltaTime chip8 (m := Except Chip8.Error) Chip8.step).mapError
           (IO.userError ∘ toString)
 
-        let (screenW, screenH) := ((← GetScreenWidth), (← GetScreenHeight))
-        BeginDrawing
-        ClearBackground Raylib.BLANK
-        chip8.render (Rectangle.mk 0 0 screenW.toUInt64.toFloat screenH.toUInt64.toFloat)
-        EndDrawing
+        let (screenW, screenH) := ((← getScreenWidth), (← getScreenHeight))
+        beginDrawing
+        clearBackground .blank
+        chip8.render (Rectangle.mk 0 0 screenW.toFloat32 screenH.toFloat32)
+        endDrawing
 
         chip8 := chip8.runDisplay
 
-        if (← IsKeyPressed KEY_ENTER) && (← IsKeyDown KEY_LEFT_ALT) then {
-          ToggleFullscreen
-          if (← IsWindowFullscreen)
-            then HideCursor
-            else ShowCursor
+        if (← isKeyPressed .enter) && (← isKeyDown .leftAlt) then {
+          toggleFullscreen
+          if (← isWindowFullscreen)
+            then hideCursor
+            else showCursor
         }
 
-        if (← WindowShouldClose)
+        if (← windowShouldClose)
           then break
           else continue
     }
-    else TraceLog' LOG_ERROR "Ram prefix has wrong size"
+    else traceLog' .error "Ram prefix has wrong size"
   }
-  else TraceLog' LOG_ERROR "ROM too big"
-  CloseAudioDevice
-  CloseWindow
+  else traceLog' .error "ROM too big"
+  closeAudioDevice
+  closeWindow
